@@ -229,6 +229,8 @@ public class MainActivity extends Activity implements OnClickListener {
 	      	    	protected void onPreExecute(){
 	      	    		publishProgress(0);
 	      	    		isCanceled = false;
+	      	    		nMaxMatchNdx = 0;
+	      	    	   	nMaxMatchRate = 0;
 	      	    	}
 	      	      
 	      	    	// 백그라운드에서 작업
