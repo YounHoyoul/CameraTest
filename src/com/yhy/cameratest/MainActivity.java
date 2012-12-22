@@ -165,6 +165,7 @@ public class MainActivity extends Activity implements OnClickListener {
 		// TODO Auto-generated method stub
 		super.onActivityResult(requestCode, resultCode, data);
 		
+		final int mode = requestCode;
 		
 		if(resultCode != RESULT_OK){
 			return;
@@ -179,15 +180,15 @@ public class MainActivity extends Activity implements OnClickListener {
 		  
 		        if(extras != null)
 		        {
-		          Bitmap photo = extras.getParcelable("data");
-		          mPhotoImageView.setImageBitmap(photo);
+		        	Bitmap photo = extras.getParcelable("data");
+		        	mPhotoImageView.setImageBitmap(photo);
 		        }
 		  
 		        // 임시 파일 삭제
 		        File f = new File(mImageCaptureUri.getPath());
 		        if(f.exists())
 		        {
-		          f.delete();
+		        	f.delete();
 		        }
 		  
 		        break;
@@ -198,6 +199,8 @@ public class MainActivity extends Activity implements OnClickListener {
 		        // 실제 코드에서는 좀더 합리적인 방법을 선택하시기 바랍니다.
 		        
 		        mImageCaptureUri = data.getData();
+		        
+		        
 	      	}
 	      
 	      	case PICK_FROM_CAMERA:{
@@ -248,7 +251,7 @@ public class MainActivity extends Activity implements OnClickListener {
 	      	    		}
 	      	    		*/
 	      	    		
-	      	    		mImgFromCamera = scaleAndTrun(MainActivity.this.grabImage());
+	      	    		mImgFromCamera = scaleAndTrun(MainActivity.this.grabImage(mode));
 	      	     	    
 	      	     	    Mat src = new Mat();
 	      	         	Mat target = new Mat();
@@ -324,6 +327,7 @@ public class MainActivity extends Activity implements OnClickListener {
 	
 	private Bitmap mImgFromCamera;
 	
+	/*
 	private void detectImage(){
 		mImgFromCamera = scaleAndTrun(this.grabImage());
    	    
@@ -351,6 +355,7 @@ public class MainActivity extends Activity implements OnClickListener {
        	}
        	
 	}
+	*/
 	
 	/*
 	private File createTemporaryFile(String part, String ext) throws Exception
@@ -365,15 +370,23 @@ public class MainActivity extends Activity implements OnClickListener {
 	}
 	*/
 	
-	public Bitmap grabImage()
+	public Bitmap grabImage(int mode)
 	{
 	    this.getContentResolver().notifyChange(mImageCaptureUri, null);
 	    ContentResolver cr = this.getContentResolver();
-	    Bitmap bitmap;
+	    Bitmap bitmap = null;
 	    try
 	    {
-	        bitmap = android.provider.MediaStore.Images.Media.getBitmap(cr, mImageCaptureUri);
-	        //imageView.setImageBitmap(bitmap);
+	    	//mImageCaptureUri.get
+	    	switch(mode){
+	    	case PICK_FROM_CAMERA:
+	    		bitmap = CameraImageUtil.SafeDecodeBitmapFile(mImageCaptureUri.getPath());
+	    		break;
+	    	case PICK_FROM_ALBUM:
+	    		bitmap = android.provider.MediaStore.Images.Media.getBitmap(cr, mImageCaptureUri);
+	    		break;
+	    	}
+	        
 	        return bitmap;
 	    }
 	    catch (Exception e)
