@@ -33,11 +33,14 @@ import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentResolver;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
@@ -45,25 +48,50 @@ import android.graphics.BitmapFactory;
 import android.util.Base64;
 import android.util.Log;
 import android.view.Menu;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements OnClickListener {
 	private static final String TAG = "CAMERA::Activity";
 	private static final boolean D = false;
 	private static final int BOUNDARY = 35;
+	
+	private static final int PICK_FROM_CAMERA = 0;
+	private static final int PICK_FROM_ALBUM = 1;
+	private static final int CROP_FROM_CAMERA = 2;
 	
 	private Mat mSceneDescriptors = null;
 	
 	private ImageView mSample = null;
 	private ImageView mTarget = null;
 	
+	private Uri mImageCaptureUri;
+	private ImageView mPhotoImageView;
+	private Button mButton;
+	private ProgressBar mProgress;
+	private AsyncTask<Void, Integer, Void> mTask;
 	//private Bitmap bmpSample = null;
 	//private Bitmap bmpCrop = null;
 	
-	private Uri mImageUri = null;
+	//private Uri mImageUri = null;
 	
+   	private static int [] mResources = new int[]{
+   			R.drawable.converted_resized_target1,
+   			R.drawable.converted_resized_target2,
+   			R.drawable.converted_resized_target3,
+   			R.drawable.converted_resized_target4,
+   			R.drawable.converted_resized_target5,
+   			R.drawable.converted_resized_target6
+   	};
+	
+   	private int nMaxMatchNdx = 0;
+   	private int nMaxMatchRate = 0;
+   	
     private org.opencv.android.BaseLoaderCallback mLoaderCallback = new org.opencv.android.BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
@@ -73,11 +101,9 @@ public class MainActivity extends Activity {
                     Log.i(TAG, "OpenCV loaded successfully");
                     //mOpenCvCameraView.enableView();
                     
-                    setContentView(R.layout.activity_main);
-                    
-                    mSample = (ImageView)findViewById(R.id.sample);
-            		mTarget = (ImageView)findViewById(R.id.crop);
+                    mButton.setEnabled(true);
             	    
+                    /*
             		Intent intent = new Intent("android.media.action.IMAGE_CAPTURE");
             	    File photo;
             	    try
@@ -96,7 +122,7 @@ public class MainActivity extends Activity {
             	    intent.putExtra(MediaStore.EXTRA_OUTPUT, mImageUri);
             	    //start camera intent
             	    startActivityForResult(intent, 1004);
-            		
+            		*/
             	    
                 } break;
                 default:
@@ -110,6 +136,15 @@ public class MainActivity extends Activity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		
+		setContentView(R.layout.activity_main);
+        
+		mButton = (Button)findViewById(R.id.start);
+        mSample = (ImageView)findViewById(R.id.sample);
+		mTarget = (ImageView)findViewById(R.id.crop);
+		mProgress = (ProgressBar)findViewById(R.id.progress);
+		
+		mButton.setOnClickListener(this);
 		
 		if (!OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_3, this, mLoaderCallback))
 	    {
@@ -130,88 +165,192 @@ public class MainActivity extends Activity {
 		// TODO Auto-generated method stub
 		super.onActivityResult(requestCode, resultCode, data);
 		
-    	if(requestCode == 1004 && resultCode==RESULT_OK)
-        {
-    		Bitmap imgFromCamera = scaleAndTrun(this.grabImage());
-	   	    
-	   	    Mat src = new Mat();
-	       	Mat target = new Mat();
-	       	
-	       	BitmapFactory.Options options = new BitmapFactory.Options();
-	       	options.inPreferredConfig = Config.ARGB_8888;
-	       	//Bitmap input1 = scaleAndTrun(BitmapFactory.decodeResource(getResources(), R.drawable.crop));
-	       	Utils.bitmapToMat(imgFromCamera, src);
-	       	
-	       	int [] resources = new int[]{
-	       			R.drawable.converted_resized_target1,
-	       			R.drawable.converted_resized_target2,
-	       			R.drawable.converted_resized_target3,
-	       			R.drawable.converted_resized_target4,
-	       			R.drawable.converted_resized_target5,
-	       			R.drawable.converted_resized_target6
-	       	};
-	       	
-	       	int nMaxMatchNdx = 0;
-	       	int nMaxMatchRate = 0;
-	       	
-	       	long lStartTime  = 0 ;
-	       	
-	       	mSceneDescriptors = null;
-	       	
-	       	for(int i = 0 ;i < 6 ; i++){
-	       		if(D){
-	       			Log.v(TAG,"START##################################################################");
-	       		}
-	       		
-	       		lStartTime  = new Date().getTime();
-	       		
-		       	Bitmap input2 = scaleAndTrun(BitmapFactory.decodeResource(getResources(), resources[i]));
-		       	if(D){
-		       		long lEndTime = new Date().getTime();
-		       		
-		       		lStartTime  = new Date().getTime();
-		       	}
-		       	
-		       	//Bitmap input2 = BitmapFactory.decodeResource(getResources(), resources[i]);
-		       	Utils.bitmapToMat(input2, target);
-		       	
-		       	if(D){
-		       		long lEndTime = new Date().getTime();
-		       		Log.v(TAG,"After bitmpatToMat : "+ (lEndTime - lStartTime));
-		       		lStartTime  = new Date().getTime();
-		       	}
-		       	
-		       	//int nMatchRate = surf(src,target,mSample,mTarget);
-		       	//nMatchRate = surf(target,src,mSample,mCrop);
-		       	
-		       	Mat matScene = getSecenDescriptor(src);
-		       	Mat matTrain = getTrainDescriptor(target,i);
-		       	int nMatchRate = match(matScene,matTrain);
-		       	
-		       	if(D){
-		       		long lEndTime = new Date().getTime();
-		       		Log.v(TAG,"After surf : "+ (lEndTime - lStartTime));
-		       		lStartTime  = new Date().getTime();
-		       	}
-		       	
-		       	if(nMaxMatchRate < nMatchRate){
-		       		nMaxMatchRate = nMatchRate;
-		       		nMaxMatchNdx = i;
-		       	}
-		       	
-		       	if(D){
-	       			Log.v(TAG,"END####################################################################");
-	       		}
-	       	}
-	       	
-	       	TextView tv = (TextView)findViewById(R.id.txt_desc);
-			tv.setText("Max Matching Rate : "+nMaxMatchRate+"%");
-       		mSample.setImageBitmap(imgFromCamera);
-       		mTarget.setImageResource(resources[nMaxMatchNdx]);
+		
+		if(resultCode != RESULT_OK){
+			return;
+	    }
 
-        }
+	    switch(requestCode){
+	      	case CROP_FROM_CAMERA:{
+	      		// 크롭이 된 이후의 이미지를 넘겨 받습니다.
+	      		// 이미지뷰에 이미지를 보여준다거나 부가적인 작업 이후에
+		        // 임시 파일을 삭제합니다.
+		        final Bundle extras = data.getExtras();
+		  
+		        if(extras != null)
+		        {
+		          Bitmap photo = extras.getParcelable("data");
+		          mPhotoImageView.setImageBitmap(photo);
+		        }
+		  
+		        // 임시 파일 삭제
+		        File f = new File(mImageCaptureUri.getPath());
+		        if(f.exists())
+		        {
+		          f.delete();
+		        }
+		  
+		        break;
+	      	}
+	  
+	      	case PICK_FROM_ALBUM:{
+		        // 이후의 처리가 카메라와 같으므로 일단  break없이 진행합니다.
+		        // 실제 코드에서는 좀더 합리적인 방법을 선택하시기 바랍니다.
+		        
+		        mImageCaptureUri = data.getData();
+	      	}
+	      
+	      	case PICK_FROM_CAMERA:{
+		        // 이미지를 가져온 이후의 리사이즈할 이미지 크기를 결정합니다.
+		        // 이후에 이미지 크롭 어플리케이션을 호출하게 됩니다.
+	      		
+	      		/*
+		        Intent intent = new Intent("com.android.camera.action.CROP");
+		        intent.setDataAndType(mImageCaptureUri, "image/*");
+		  
+		        intent.putExtra("outputX", 90);
+		        intent.putExtra("outputY", 90);
+		        intent.putExtra("aspectX", 1);
+		        intent.putExtra("aspectY", 1);
+		        intent.putExtra("scale", true);
+		        intent.putExtra("return-data", true);
+		        startActivityForResult(intent, CROP_FROM_CAMERA);
+		  		*/
+	      		
+	      		
+	      	// AsyncTask는 재활용할 수 없습니다. 매번 새롭게 생성
+	      	    mTask = new AsyncTask<Void, Integer, Void>()
+	      	    {
+	      	    	// 작업 취소시 사용하기 위한 플래그
+	      	    	private boolean isCanceled = false;
+	      	      
+	      	    	// 작업을 시작하기 직전에 호출되는 메서드
+	      	    	@Override
+	      	    	protected void onPreExecute(){
+	      	    		publishProgress(0);
+	      	    		isCanceled = false;
+	      	    	}
+	      	      
+	      	    	// 백그라운드에서 작업
+	      	    	@Override
+	      	    	protected Void doInBackground(Void... params){
+	      	    		// 0.1초마다 100단계로 구성된 프로그래스바를 1씩 증가시킵니다.
+	      	    		/*
+	      	    		for(int i = 1 ; i <= 100 && ! isCanceled ; i++){
+	      	    			try{
+	      	    				publishProgress(i);
+	      	    				Thread.sleep(10);
+	      	    			}catch(InterruptedException e){
+	      	    				e.printStackTrace();
+	      	    			}
+	      	    		}
+	      	    		*/
+	      	    		
+	      	    		mImgFromCamera = scaleAndTrun(MainActivity.this.grabImage());
+	      	     	    
+	      	     	    Mat src = new Mat();
+	      	         	Mat target = new Mat();
+	      	         	
+	      	         	BitmapFactory.Options options = new BitmapFactory.Options();
+	      	         	options.inPreferredConfig = Config.ARGB_8888;
+	      	         	Utils.bitmapToMat(mImgFromCamera, src);
+	      	         	
+	      	         	mSceneDescriptors = null;
+	      	         	
+	      	         	for(int i = 0 ;i < 6 ; i++){
+		      	  	       	Bitmap input2 = scaleAndTrun(BitmapFactory.decodeResource(getResources(), mResources[i]));
+		      	  	       	Utils.bitmapToMat(input2, target);
+		      	  	       	
+		      	  	       	Mat matScene = getSecenDescriptor(src);
+		      	  	       	Mat matTrain = getTrainDescriptor(target,i);
+		      	  	       	int nMatchRate = match(matScene,matTrain);
+		      	  	       	
+		      	  	       	if(nMaxMatchRate < nMatchRate){
+		      	  	       		nMaxMatchRate = nMatchRate;
+		      	  	       		nMaxMatchNdx = i;
+		      	  	       	}
+		      	  	       	
+		      	  	       	publishProgress(15*(i+1));
+	      	         	}
+	      	    		
+	      	    		
+	      	    		return null;
+	      	    	}
+
+	      	    	// publishProgress() 메서드를 통해 호출됩니다. 진행사항을 표시하는데에 쓰입니다.
+	      	    	@Override
+	      	    	protected void onProgressUpdate(Integer... progress){
+	      	    		if(progress[0] == 0){
+	      	    			mProgress.setVisibility(View.VISIBLE);
+	      	    		}
+	      	    		mProgress.setProgress(progress[0]);
+	      	    	}
+	      	      
+	      	    	// 작업 완료 직후에 호출되는 메소드
+	      	    	@Override
+	      	    	protected void onPostExecute(Void result){
+	      	    		//Toast.makeText(MainActivity.this, "완료됨", Toast.LENGTH_SHORT).show();
+	      	    		//mButton.setText("start");
+	      	    		publishProgress(100);
+	      	    		
+	      	    		TextView tv = (TextView)findViewById(R.id.txt_desc);
+	      	    		tv.setText("Max Matching Rate : "+nMaxMatchRate+"%");
+	      	     		mSample.setImageBitmap(mImgFromCamera);
+	      	     		mTarget.setImageResource(mResources[nMaxMatchNdx]);
+	      	     		
+	      	     		mProgress.setVisibility(View.GONE);
+	      	    	}
+	      	      
+	      	    	// 외부에서 강제로 취소할때 호출되는 메소드
+	      	    	@Override
+	      	    	protected void onCancelled(){
+	      	    		isCanceled = true;
+	      	    		publishProgress(0);
+	      	    		Toast.makeText(MainActivity.this, "취소됨", Toast.LENGTH_SHORT).show();
+	      	    	}
+	      	    };
+	      	    
+	      	    // 작업 시작
+	      	    mTask.execute();
+	      		
+	      		
+	      		
+		        break;
+	      	}
+	    }
 	}
 	
+	private Bitmap mImgFromCamera;
+	
+	private void detectImage(){
+		mImgFromCamera = scaleAndTrun(this.grabImage());
+   	    
+   	    Mat src = new Mat();
+       	Mat target = new Mat();
+       	
+       	BitmapFactory.Options options = new BitmapFactory.Options();
+       	options.inPreferredConfig = Config.ARGB_8888;
+       	Utils.bitmapToMat(mImgFromCamera, src);
+       	
+       	mSceneDescriptors = null;
+       	
+       	for(int i = 0 ;i < 6 ; i++){
+	       	Bitmap input2 = scaleAndTrun(BitmapFactory.decodeResource(getResources(), mResources[i]));
+	       	Utils.bitmapToMat(input2, target);
+	       	
+	       	Mat matScene = getSecenDescriptor(src);
+	       	Mat matTrain = getTrainDescriptor(target,i);
+	       	int nMatchRate = match(matScene,matTrain);
+	       	
+	       	if(nMaxMatchRate < nMatchRate){
+	       		nMaxMatchRate = nMatchRate;
+	       		nMaxMatchNdx = i;
+	       	}
+       	}
+       	
+	}
+	
+	/*
 	private File createTemporaryFile(String part, String ext) throws Exception
 	{
 	    File tempDir= Environment.getExternalStorageDirectory();
@@ -222,15 +361,16 @@ public class MainActivity extends Activity {
 	    }
 	    return File.createTempFile(part, ext, tempDir);
 	}
+	*/
 	
 	public Bitmap grabImage()
 	{
-	    this.getContentResolver().notifyChange(mImageUri, null);
+	    this.getContentResolver().notifyChange(mImageCaptureUri, null);
 	    ContentResolver cr = this.getContentResolver();
 	    Bitmap bitmap;
 	    try
 	    {
-	        bitmap = android.provider.MediaStore.Images.Media.getBitmap(cr, mImageUri);
+	        bitmap = android.provider.MediaStore.Images.Media.getBitmap(cr, mImageCaptureUri);
 	        //imageView.setImageBitmap(bitmap);
 	        return bitmap;
 	    }
@@ -398,6 +538,75 @@ public class MainActivity extends Activity {
 		return img_bit;
 	}
 	
+    
+    /**
+     * 카메라에서 이미지 가져오기
+     */
+    private void doTakePhotoAction()
+    {
+      /*
+       * 참고 해볼곳
+       * http://2009.hfoss.org/Tutorial:Camera_and_Gallery_Demo
+       * http://stackoverflow.com/questions/1050297/how-to-get-the-url-of-the-captured-image
+       * http://www.damonkohler.com/2009/02/android-recipes.html
+       * http://www.firstclown.us/tag/android/
+       */
+
+      Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+      
+      // 임시로 사용할 파일의 경로를 생성
+      String url = "tmp_" + String.valueOf(System.currentTimeMillis()) + ".jpg";
+      mImageCaptureUri = Uri.fromFile(new File(Environment.getExternalStorageDirectory(), url));
+      
+      intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, mImageCaptureUri);
+      // 특정기기에서 사진을 저장못하는 문제가 있어 다음을 주석처리 합니다.
+      //intent.putExtra("return-data", true);
+      startActivityForResult(intent, PICK_FROM_CAMERA);
+    }
+    
+    /**
+     * 앨범에서 이미지 가져오기
+     */
+    private void doTakeAlbumAction()
+    {
+      // 앨범 호출
+      Intent intent = new Intent(Intent.ACTION_PICK);
+      intent.setType(android.provider.MediaStore.Images.Media.CONTENT_TYPE);
+      startActivityForResult(intent, PICK_FROM_ALBUM);
+    }
+    
+    @Override
+    public void onClick(View v)
+    {
+    	DialogInterface.OnClickListener cameraListener = new DialogInterface.OnClickListener(){
+    		@Override
+    		public void onClick(DialogInterface dialog, int which){
+    			doTakePhotoAction();
+    		}	
+    	};
+      
+    	DialogInterface.OnClickListener albumListener = new DialogInterface.OnClickListener(){
+    		@Override
+    		public void onClick(DialogInterface dialog, int which){
+    			doTakeAlbumAction();
+    		}
+    	};
+      
+    	DialogInterface.OnClickListener cancelListener = new DialogInterface.OnClickListener(){
+    		@Override
+    		public void onClick(DialogInterface dialog, int which){
+    			dialog.dismiss();
+    		}
+    	};
+      
+    	new AlertDialog.Builder(this)
+        	.setTitle("Choose Image")
+        	.setPositiveButton("TakePhoto", cameraListener)
+        	.setNeutralButton("Album", albumListener)
+        	.setNegativeButton("Cancel", cancelListener)
+        	.show();
+    }
+    
 	/*
     private int surf(Mat srcMat, Mat targetMat, 
     		ImageView srcImageView, ImageView targetImageView){
